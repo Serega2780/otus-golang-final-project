@@ -1,0 +1,93 @@
+run:
+  tests: true
+
+linters-settings:
+  funlen:
+    lines: 150
+    statements: 80
+  gosec:
+    excludes:
+      - G115
+  depguard:
+    rules:
+      main:
+        allow:
+          - $gostd
+          - fmt
+          - os
+          - github.com/kelseyhightower/envconfig
+          - github.com/sirupsen/logrus
+          - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/config
+          - github.com/stretchr/testify/require
+          - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/logger
+          - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/service
+          - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/util
+          - github.com/gorilla/mux
+          - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/http
+          - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/lru
+          - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/model
+          - github.com/nfnt/resize
+          - github.com/cucumber/godog
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - dupl
+        - gocyclo
+        - gosec
+
+linters:
+  disable-all: true
+  enable:
+    - asciicheck
+    - bodyclose
+    - depguard
+    - dogsled
+    - dupl
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - funlen
+    - gci
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gofmt
+    - gofumpt
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - importas
+    - ineffassign
+    - lll
+    - makezero
+    - misspell
+    - nestif
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - stylecheck
+    - tagliatelle
+    - thelper
+    - tparallel
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - wastedassign
+    - whitespace

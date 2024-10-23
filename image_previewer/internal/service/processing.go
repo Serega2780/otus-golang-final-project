@@ -1,0 +1,210 @@
+package service
+
+import (
+	"bytes"
+	"fmt"
+	"image/jpeg"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/config"
+	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/logger"
+	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/lru"
+	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/model"
+	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/util"
+	"github.com/nfnt/resize"
+)
+
+type ImageProcessingService struct {
+	log   *logger.Logger
+	dir   string
+	cache lru.Cache
+}
+
+func NewImageProcessingService(l *logger.Logger, conf *config.CacheConf) *ImageProcessingService {
+	return &ImageProcessingService{
+		log:   l,
+		dir:   conf.Dir,
+		cache: lru.NewCache(conf.Capacity),
+	}
+}
+
+func (ips *ImageProcessingService) Resize(imageInfo *model.ImageInfo, resizedKey string) ([]byte, error) {
+	originalFile := imageInfo.BasicFile
+	original, err := ips.readFile(originalFile)
+	if err != nil {
+		return nil, err
+	}
+
+	img, err := jpeg.Decode(bytes.NewReader(original))
+	if err != nil {
+		return nil, fmt.Errorf(util.ErrWrongImageFormat.Error(), err)
+	}
+	width, height := util.ParseKey(resizedKey)
+	resizedImage := resize.Resize(width, height, img, resize.Lanczos2)
+	buf := new(bytes.Buffer)
+	err = jpeg.Encode(buf, resizedImage, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp := buf.Bytes()
+	name := util.Substr(originalFile, strings.LastIndex(originalFile, util.SLASH)+1,
+		strings.LastIndex(originalFile, util.UNDERSCORE)+1)
+	ext := util.Substr(originalFile, strings.LastIndex(originalFile, util.DOT),
+		len(originalFile))
+	resizedFile := name + resizedKey + ext
+	err = ips.saveFile(imageInfo.BasicDir+resizedFile, resp)
+	if err != nil {
+		ips.log.Errorf("%s file save failed", resizedFile)
+		return nil, err
+	}
+	imageInfo.Files[resizedKey] = imageInfo.BasicDir + resizedFile
+
+	return resp, nil
+}
+
+func (ips *ImageProcessingService) AddRoot(src []byte, imageInfo *model.ImageInfo,
+	infoKey string,
+) (*model.ImageInfo, error) {
+	ips.mkDir(imageInfo.BasicDir)
+	err := ips.saveFile(imageInfo.BasicFile, src)
+	if err != nil {
+		return nil, err
+	}
+	_ = ips.cache.Set(lru.Key(infoKey), imageInfo)
+
+	return ips.Get(infoKey)
+}
+
+func (ips *ImageProcessingService) Get(key string) (*model.ImageInfo, error) {
+	v, b := ips.cache.Get(lru.Key(key))
+	if !b {
+		return nil, util.ErrNotExist
+	}
+	imageInfo := v.(*model.ImageInfo)
+
+	return imageInfo, nil
+}
+
+func (ips *ImageProcessingService) GetResized(imageInfo *model.ImageInfo, keyResized string) ([]byte, error) {
+	fileResized := imageInfo.GetFile(keyResized)
+
+	return ips.readFile(fileResized)
+}
+
+func (ips *ImageProcessingService) ProcessPath(path string) (string, string, *model.ImageInfo, error) {
+	width, err := strconv.Atoi(util.Substr(path, 0, strings.Index(path, util.SLASH)))
+	if err != nil {
+		er := fmt.Errorf(util.ErrPathVariableWrong.Error(), util.WIDTH)
+		ips.log.Errorf("%v", er)
+		return "", "", nil, er
+	}
+	path, _ = strings.CutPrefix(path, util.Substr(path, 0, strings.Index(path, util.SLASH)+1))
+	height, err := strconv.Atoi(util.Substr(path, 0, strings.Index(path, util.SLASH)))
+	if err != nil {
+		er := fmt.Errorf(util.ErrPathVariableWrong.Error(), util.HEIGHT)
+		ips.log.Errorf("%v", er)
+		return "", "", nil, er
+	}
+	path, _ = strings.CutPrefix(path, util.Substr(path, 0, strings.Index(path, util.SLASH)+1))
+	if len(path) == 0 {
+		er := fmt.Errorf(util.ErrPathVariableWrong.Error(), util.URL)
+		ips.log.Errorf("%v", er)
+		return "", "", nil, er
+	}
+	fileName := util.GetFileName(path)
+	underscore := strings.LastIndex(fileName, util.UNDERSCORE)
+	if underscore == -1 {
+		return "", "", nil, util.ErrFileNameFormat
+	}
+	dot := strings.LastIndex(fileName, util.DOT)
+	if dot == -1 {
+		return "", "", nil, util.ErrFileNameFormat
+	}
+	name := util.Substr(fileName, 0, underscore+1)
+	if len(name) == 0 {
+		return "", "", nil, util.ErrFileNameTooShort
+	}
+	ext := util.Substr(fileName, dot, len(fileName))
+	if ext != util.JPG && ext != util.JPEG {
+		ips.log.Errorf("%v", util.ErrWrongImageType)
+		return "", "", nil, util.ErrWrongImageType
+	}
+	dimensions := util.Substr(fileName, underscore+1, dot)
+	dims := strings.Split(dimensions, util.X)
+	w, err := strconv.Atoi(dims[0])
+	if err != nil {
+		ips.log.Errorf("%v", err)
+		return "", "", nil, err
+	}
+	h, err := strconv.Atoi(dims[1])
+	if err != nil {
+		ips.log.Errorf("%v", err)
+		return "", "", nil, err
+	}
+	if width > w || height > h {
+		ips.log.Errorf("%v", util.ErrWrongDimensions)
+		return "", "", nil, util.ErrWrongDimensions
+	}
+	remoteAddress := util.Substr(path, 0, strings.Index(path, util.SLASH))
+	bd := ips.dir + remoteAddress + util.SLASH
+	info := model.NewImageInfo(bd+fileName, bd)
+	rk := strconv.Itoa(width) + util.UNDERSCORE + strconv.Itoa(height)
+
+	return path, rk, info, nil
+}
+
+func (ips *ImageProcessingService) saveFile(fileName string, data []byte) error {
+	f, err := openFile(fileName)
+	if err != nil && os.IsNotExist(err) {
+		f, err = os.Create(fileName)
+		if err != nil {
+			return err
+		}
+		_, err = f.Write(data)
+		if err != nil {
+			return err
+		}
+		defer ips.closeFile(f, fileName)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer ips.closeFile(f, fileName)
+
+	return nil
+}
+
+func (ips *ImageProcessingService) readFile(fileName string) ([]byte, error) {
+	f, err := openFile(fileName)
+	if err != nil {
+		return nil, err
+	}
+	defer ips.closeFile(f, fileName)
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
+func openFile(fileName string) (*os.File, error) {
+	return os.Open(fileName)
+}
+
+func (ips *ImageProcessingService) mkDir(dir string) {
+	err := os.Mkdir(dir, 0o755)
+	ips.log.Errorf("%v", err)
+}
+
+func (ips *ImageProcessingService) closeFile(f *os.File, fileName string) {
+	err := f.Close()
+	if err != nil {
+		ips.log.Errorf("error close %s %v", fileName, err)
+	}
+}
