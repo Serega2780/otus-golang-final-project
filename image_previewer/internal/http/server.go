@@ -35,7 +35,7 @@ func (s *Server) Start(ctx context.Context) {
 	server := &http.Server{
 		Addr:              strings.Join([]string{s.ip, s.port}, ":"),
 		Handler:           r,
-		ReadHeaderTimeout: 2 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	s.srv = server
 	s.ctx = ctx
