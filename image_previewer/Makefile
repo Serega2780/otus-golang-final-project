@@ -1,26 +1,14 @@
-BIN_CALENDAR := "./bin/image_previewer"
+BIN_PREVIEWER := "./bin/image_previewer"
 DOCKER_IMG="image_previewer:develop"
 
 GIT_HASH := $(shell git log --format="%h" -n 1)
 LDFLAGS := -X main.release="develop" -X main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%S) -X main.gitHash=$(GIT_HASH)
 
 build:
-	go build -v -o $(BIN_CALENDAR) -ldflags "$(LDFLAGS)" ./cmd
+	go build -v -o $(BIN_PREVIEWER) -ldflags "$(LDFLAGS)" ./cmd
 
-# run: build
-# 	$(BIN_CALENDAR) -config ./configs/calendar_config.yaml
-
-# build-img:
-# 	docker build \
-# 		--build-arg=LDFLAGS="$(LDFLAGS)" \
-# 		-t $(DOCKER_IMG) \
-# 		-f build/Dockerfile .
-#
-# run-img: build-img
-# 	docker run $(DOCKER_IMG)
-#
-# version: build
-# 	$(BIN_CALENDAR) version
+run: build
+	$(BIN_PREVIEWER) -config ./configs/config.yaml
 
 up:
 	docker compose -f docker-compose.yaml up -d
@@ -54,6 +42,4 @@ install-lint-deps:
 lint: install-lint-deps
 	golangci-lint run ./...
 
-# run build-img run-img
-
-.PHONY: build  version test lint
+.PHONY: lint build test integration_test

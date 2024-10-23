@@ -27,6 +27,7 @@ linters-settings:
           - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/lru
           - github.com/Serega2780/otus-golang-final-project/image_previewer/internal/model
           - github.com/nfnt/resize
+          - github.com/cucumber/godog
 
 issues:
   exclude-rules:

@@ -1,10 +1,13 @@
 package service
 
-import "net/http"
+import (
+	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/model"
+)
 
 type ImageService interface {
-	SetKey(width, height int, file string) (string, error)
-	Add(src []byte, headers http.Header, key string) ([]byte, error)
-	Get(key string) ([]byte, http.Header, error)
-	Resize(original []byte, width, height uint) ([]byte, error)
+	AddRoot(src []byte, imageInfo *model.ImageInfo, infoKey string) (*model.ImageInfo, error)
+	Get(key string) (*model.ImageInfo, error)
+	GetResized(imageInfo *model.ImageInfo, keyResized string) ([]byte, error)
+	Resize(imageInfo *model.ImageInfo, resizedKey string) ([]byte, error)
+	ProcessPath(path string) (string, string, *model.ImageInfo, error)
 }

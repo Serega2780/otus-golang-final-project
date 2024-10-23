@@ -8,16 +8,22 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/logger"
+	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/model"
 	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/service"
 	"github.com/Serega2780/otus-golang-final-project/image_previewer/internal/util"
 	"golang.org/x/sync/singleflight"
 )
 
 var sfg = singleflight.Group{}
+
+type proxyResponse struct {
+	body    []byte
+	headers http.Header
+	status  int
+}
 
 type ProxyHandler struct {
 	ctx     context.Context
@@ -38,67 +44,57 @@ func NewProxyHandler(ctx context.Context, logger *logger.Logger, service service
 func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		resp := fmt.Sprintf(util.ErrMethodNotAllowed.Error(), r.Method, r.URL.Path)
+		p.log.Errorf("%v", util.ErrMethodNotAllowed)
 		http.Error(w, resp, http.StatusMethodNotAllowed)
 		return
 	}
 	path := r.URL.Path
-	width, err := strconv.Atoi(util.Substr(r.URL.Path, 0, strings.Index(path, util.SLASH)))
-	p.log.Info(width)
-	if err != nil {
-		resp := fmt.Sprintf(util.ErrPathVariableWrong.Error(), util.WIDTH)
-		http.Error(w, resp, http.StatusBadRequest)
-		return
-	}
-	path, _ = strings.CutPrefix(path, util.Substr(path, 0, strings.Index(path, util.SLASH)+1))
-	height, err := strconv.Atoi(util.Substr(path, 0, strings.Index(path, util.SLASH)))
-	p.log.Info(height)
-	if err != nil {
-		resp := fmt.Sprintf(util.ErrPathVariableWrong.Error(), util.HEIGHT)
-		http.Error(w, resp, http.StatusBadRequest)
-		return
-	}
-	path, _ = strings.CutPrefix(path, util.Substr(path, 0, strings.Index(path, util.SLASH)+1))
-	if len(path) == 0 {
-		resp := fmt.Sprintf(util.ErrPathVariableWrong.Error(), util.URL)
-		http.Error(w, resp, http.StatusBadRequest)
-		return
-	}
-	fileName := util.Substr(path, strings.LastIndex(path, util.SLASH)+1, len(path))
 
-	ext := util.Substr(fileName, strings.LastIndex(fileName, util.DOT)+1, len(fileName))
-	if ext != util.JPG && ext != util.JPEG {
-		http.Error(w, util.ErrWrongImageType.Error(), http.StatusBadRequest)
-		return
-	}
-
-	key, err := p.service.SetKey(width, height, fileName)
+	infoKey, resizedKey, newImageInfo, err := p.service.ProcessPath(path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	b, headers, err := p.service.Get(key)
-	if errors.Is(err, util.ErrNotExist) {
-		var status int
-		v, err, _ := sfg.Do(key, func() (interface{}, error) {
-			status, b, err = p.proxyRequest(w, r, path)
+
+	var status int
+	imageInfo, er := p.service.Get(infoKey)
+	if er != nil {
+		v, er, _ := sfg.Do(infoKey, func() (interface{}, error) {
+			resp, err := p.proxyRequest(r, infoKey)
 			if err != nil {
-				return nil, err
+				return resp, err
 			}
-			newBytes, err := p.service.Resize(b, uint(width), uint(height))
-			if err != nil {
-				return nil, err
+			newImageInfo.Headers = resp.headers
+			return p.service.AddRoot(resp.body, newImageInfo, infoKey)
+		})
+		if er != nil {
+			if errors.Is(er, util.ErrNon200Status) {
+				pr := v.(*proxyResponse)
+				p.sendResponse(w, pr.body, pr.headers, pr.status)
+				return
 			}
-			w.Header().Del("Content-Length")
-			w.Header().Set("Content-Length", strconv.Itoa(len(newBytes)))
-			return p.service.Add(newBytes, w.Header(), key)
+			http.Error(w, er.Error(), http.StatusInternalServerError)
+			return
+		}
+		imageInfo = v.(*model.ImageInfo)
+	}
+	b, err := p.service.GetResized(imageInfo, resizedKey)
+	if err != nil {
+		v, err, _ := sfg.Do(resizedKey, func() (interface{}, error) {
+			return p.service.Resize(imageInfo, resizedKey)
 		})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		p.sendResponse(w, v.([]byte), nil, status)
+		newBytes := v.([]byte)
+		imageInfo.Headers.Set("Content-Length", strconv.Itoa(len(newBytes)))
+		imageInfo.Headers.Set("X-Previewer-Cache-Hit", "false")
+		p.sendResponse(w, newBytes, imageInfo.Headers, status)
 	} else {
-		p.sendResponse(w, b, headers, http.StatusOK)
+		imageInfo.Headers.Set("Content-Length", strconv.Itoa(len(b)))
+		imageInfo.Headers.Set("X-Previewer-Cache-Hit", "true")
+		p.sendResponse(w, b, imageInfo.Headers, http.StatusOK)
 	}
 }
 
@@ -115,14 +111,14 @@ func (p *ProxyHandler) sendResponse(w http.ResponseWriter, response []byte, head
 	}
 }
 
-func (p *ProxyHandler) proxyRequest(w http.ResponseWriter, r *http.Request, path string) (int, []byte, error) {
+func (p *ProxyHandler) proxyRequest(r *http.Request, path string) (*proxyResponse, error) {
 	targetURL := util.HTTP + path
-	reqCtx, cancel := context.WithTimeout(p.ctx, 5*time.Second)
+	reqCtx, cancel := context.WithTimeout(p.ctx, 5*time.Hour)
 	defer cancel()
 	proxyReq, err := http.NewRequestWithContext(reqCtx, r.Method, targetURL, nil)
 	if err != nil {
 		p.log.Errorf("Error creating proxy request %v", err)
-		return 0, nil, err
+		return nil, err
 	}
 
 	copyHeaders(r.Header, proxyReq.Header)
@@ -130,14 +126,22 @@ func (p *ProxyHandler) proxyRequest(w http.ResponseWriter, r *http.Request, path
 	resp, err := p.client.Do(proxyReq)
 	if err != nil {
 		p.log.Errorf("Error sending proxy request %v", err)
-		return 0, nil, err
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	copyHeaders(resp.Header, w.Header())
 	b, err := io.ReadAll(resp.Body)
-
-	return resp.StatusCode, b, err
+	if err != nil {
+		return nil, err
+	}
+	pr := &proxyResponse{
+		body:    b,
+		headers: resp.Header,
+		status:  resp.StatusCode,
+	}
+	if resp.StatusCode > 299 {
+		return pr, util.ErrNon200Status
+	}
+	return pr, nil
 }
 
 func copyHeaders(src, dst http.Header) {

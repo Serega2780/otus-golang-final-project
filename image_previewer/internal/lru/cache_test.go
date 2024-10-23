@@ -23,10 +23,10 @@ func TestCache(t *testing.T) {
 	t.Run("simple", func(t *testing.T) {
 		c := NewCache(5)
 
-		wasInCache := c.Set("aaa", 100)
+		wasInCache, _ := c.Set("aaa", 100)
 		require.False(t, wasInCache)
 
-		wasInCache = c.Set("bbb", 200)
+		wasInCache, _ = c.Set("bbb", 200)
 		require.False(t, wasInCache)
 
 		val, ok := c.Get("aaa")
@@ -37,7 +37,7 @@ func TestCache(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, 200, val)
 
-		wasInCache = c.Set("aaa", 300)
+		wasInCache, _ = c.Set("aaa", 300)
 		require.True(t, wasInCache)
 
 		val, ok = c.Get("aaa")
@@ -53,14 +53,15 @@ func TestCache(t *testing.T) {
 		// Write me
 		c := NewCache(3)
 
-		wasInCache := c.Set("aaa", 100)
+		wasInCache, _ := c.Set("aaa", 100)
 		require.False(t, wasInCache)
-		wasInCache = c.Set("bbb", 200)
+		wasInCache, _ = c.Set("bbb", 200)
 		require.False(t, wasInCache)
-		wasInCache = c.Set("ccc", 300)
+		wasInCache, _ = c.Set("ccc", 300)
 		require.False(t, wasInCache)
-		wasInCache = c.Set("ddd", 400)
+		wasInCache, oldest := c.Set("ddd", 400)
 		require.False(t, wasInCache)
+		require.Equal(t, 100, oldest.(int))
 
 		_, wasInCache = c.Get("aaa")
 		require.False(t, wasInCache)
@@ -76,11 +77,11 @@ func TestCache(t *testing.T) {
 		// Write me
 		c := NewCache(3)
 
-		wasInCache := c.Set("aaa", 100)
+		wasInCache, _ := c.Set("aaa", 100)
 		require.False(t, wasInCache)
-		wasInCache = c.Set("bbb", 200)
+		wasInCache, _ = c.Set("bbb", 200)
 		require.False(t, wasInCache)
-		wasInCache = c.Set("ccc", 300)
+		wasInCache, _ = c.Set("ccc", 300)
 		require.False(t, wasInCache)
 
 		c.Get("aaa")

@@ -10,7 +10,7 @@ type Pair struct {
 }
 
 type Cache interface {
-	Set(key Key, value interface{}) bool
+	Set(key Key, value interface{}) (bool, interface{})
 	Get(key Key) (interface{}, bool)
 	Clear()
 }
@@ -45,7 +45,8 @@ func (lru *lruCache) Clear() {
 	lru.queue = NewList()
 }
 
-func (lru *lruCache) Set(key Key, value interface{}) bool {
+func (lru *lruCache) Set(key Key, value interface{}) (bool, interface{}) {
+	var oldest interface{}
 	lru.mux.Lock()
 	defer lru.mux.Unlock()
 	val, ok := lru.items[key]
@@ -59,12 +60,13 @@ func (lru *lruCache) Set(key Key, value interface{}) bool {
 			back := lru.queue.Back()
 			lru.queue.Remove(back)
 			v := back.Value.(Pair).key
+			oldest = back.Value.(Pair).value
 			delete(lru.items, v)
 		}
 		lru.items[key] = lru.queue.PushFront(*NewPair(key, value))
 	}
 
-	return ok
+	return ok, oldest
 }
 
 func (lru *lruCache) Get(key Key) (interface{}, bool) {
