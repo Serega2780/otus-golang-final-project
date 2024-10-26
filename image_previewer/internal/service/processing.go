@@ -6,6 +6,7 @@ import (
 	"image/jpeg"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -21,6 +22,7 @@ type ImageProcessingService struct {
 	log   *logger.Logger
 	dir   string
 	cache lru.Cache
+	r     *regexp.Regexp
 }
 
 func NewImageProcessingService(l *logger.Logger, conf *config.CacheConf) *ImageProcessingService {
@@ -28,6 +30,7 @@ func NewImageProcessingService(l *logger.Logger, conf *config.CacheConf) *ImageP
 		log:   l,
 		dir:   conf.Dir,
 		cache: lru.NewCache(conf.Capacity),
+		r:     regexp.MustCompile(util.PATTERN),
 	}
 }
 
@@ -119,6 +122,10 @@ func (ips *ImageProcessingService) ProcessPath(path string) (string, string, *mo
 		return "", "", nil, er
 	}
 	fileName := util.GetFileName(path)
+	isMatched := ips.r.MatchString(fileName)
+	if !isMatched {
+		return "", "", nil, fmt.Errorf(util.ErrFileNameFormat.Error(), util.PATTERN)
+	}
 	underscore := strings.LastIndex(fileName, util.UNDERSCORE)
 	if underscore == -1 {
 		return "", "", nil, util.ErrFileNameFormat
@@ -210,8 +217,10 @@ func (ips *ImageProcessingService) removeDirRecursive(path string) {
 }
 
 func (ips *ImageProcessingService) mkDir(dir string) {
-	err := os.Mkdir(dir, 0o755)
-	ips.log.Errorf("%v", err)
+	err := os.MkdirAll(dir, 0o755)
+	if err != nil {
+		ips.log.Errorf("%v", err)
+	}
 }
 
 func (ips *ImageProcessingService) closeFile(f *os.File, fileName string) {

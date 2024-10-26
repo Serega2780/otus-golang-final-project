@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrFileNameFormat    = errors.New("file name must end with '_d{1,4}xd{1,4}.<extension>'")
+	ErrFileNameFormat    = errors.New("file name must must match the pattern '%s'")
 	ErrFileNameTooShort  = errors.New("file name length must be greater 0")
 	ErrWrongDimensions   = errors.New("wrong dimensions")
 	ErrNotExist          = errors.New("image info not exists in the cache")
@@ -29,6 +29,7 @@ const (
 	UNDERSCORE = "_"
 	DOT        = "."
 	X          = "x"
+	PATTERN    = ".+_\\d+x\\d+\\.(jpg|jpeg)$"
 )
 
 func Substr(str string, start, end int) string {
