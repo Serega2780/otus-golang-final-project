@@ -10,5 +10,4 @@ Feature: Image previewer
 
   Scenario: then user try to find a non-existing image on server, an error has to be received
     When I send GET request to "/fill/300/200/nginx/_gopher_fake_1024x504.jpg" for non-existing image _gopher_fake_1024x504.jpg
-    Then the response code should be 404
-    And the response payload must contain "404 Not Found"
+    Then the response code 404 and the response payload "404 Not Found" for a non-existing image

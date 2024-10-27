@@ -9,6 +9,5 @@ Feature: Image previewer
   I will receive an appropriate image
 
   Scenario: then user try to find an existing image on server, an image has to be received
-    When I send GET request to "/fill/300/200/nginx/_gopher_original_1024x504.jpg" for an existing image _gopher_original_1024x504.jpg
-    Then the response code should be 200
-    And the response payload must be a valid JPEG image
+    When I send GET request to "/fill/300/200/nginx/gopher_2000x1000.jpg" for an existing image gopher_2000x1000.jpg
+    Then the response code 200 and the response payload must be JPEG image found remotely

@@ -17,10 +17,11 @@ func TestFeatures(t *testing.T) {
 	suite := godog.TestSuite{
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
-			Format:    "pretty",
-			Paths:     []string{"features"},
-			TestingT:  t, // Testing instance that will run subtests.
-			Randomize: 0,
+			Format:      "pretty",
+			Paths:       []string{"features"},
+			TestingT:    t, // Testing instance that will run subtests.
+			Randomize:   0,
+			Concurrency: 0,
 		},
 	}
 

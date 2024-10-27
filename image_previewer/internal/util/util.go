@@ -2,20 +2,21 @@ package util
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
 
 var (
-	ErrFileNameFormat    = errors.New("file name must must match the pattern '%s'")
-	ErrFileNameTooShort  = errors.New("file name length must be greater 0")
-	ErrWrongDimensions   = errors.New("wrong dimensions")
+	ErrWrongPath         = errors.New("the request path doesn't contain %s")
 	ErrNotExist          = errors.New("image info not exists in the cache")
 	ErrMethodNotAllowed  = errors.New("method %s not not allowed on uri %s")
 	ErrPathVariableWrong = errors.New("path variable %s has wrong value")
-	ErrWrongImageType    = errors.New("image must be of type either jpg or jpeg")
 	ErrWrongImageFormat  = errors.New("the file received is not of valid format either jpg or jpeg: %v")
+	ErrWrongImageExt     = errors.New("image must have an extension either jpg or jpeg")
 	ErrNon200Status      = errors.New("http response status differs from 2XX")
+	FILENAME             = regexp.MustCompile(PATTERN)
 )
 
 const (
@@ -24,20 +25,36 @@ const (
 	HEIGHT     = "height"
 	URL        = "url"
 	SLASH      = "/"
-	JPG        = ".jpg"
-	JPEG       = ".jpeg"
 	UNDERSCORE = "_"
 	DOT        = "."
-	X          = "x"
-	PATTERN    = ".+_\\d+x\\d+\\.(jpg|jpeg)$"
+	JPG        = ".jpg"
+	JPEG       = ".jpeg"
+	PATTERN    = `/[\w,\s-]+\.[A-Za-z]{3,4}\?|/[\w,\s-]+\.[A-Za-z]{3,4}$`
+	QUESTION   = "?"
 )
 
 func Substr(str string, start, end int) string {
 	return strings.TrimSpace(str[start:end])
 }
 
-func GetFileName(path string) string {
-	return Substr(path, strings.LastIndex(path, SLASH)+1, len(path))
+func ParsePath(path string) (string, string, string, error) {
+	remoteHost := Substr(path, 0, strings.Index(path, SLASH))
+	if len(remoteHost) == 0 {
+		return "", "", "", fmt.Errorf(ErrWrongPath.Error(), "host address")
+	}
+	matches := FILENAME.FindStringSubmatch(path)
+	if len(matches) == 0 {
+		return "", "", "", fmt.Errorf(ErrWrongPath.Error(), "file name in a valid format "+PATTERN)
+	}
+	s := matches[len(matches)-1]
+	fileName := Substr(s, 1, len(s))
+	ext := Substr(fileName, strings.Index(fileName, DOT), len(fileName))
+	if ext != JPG && ext != JPEG {
+		return "", "", "", ErrWrongImageExt
+	}
+	subDir := Substr(fileName, 0, strings.Index(fileName, DOT))
+
+	return remoteHost, subDir, fileName, nil
 }
 
 func ParseKey(resizedKey string) (width, height uint) {

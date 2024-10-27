@@ -10,5 +10,4 @@ Feature: Image previewer
 
   Scenario: then user try to find image on non-existing server, an error has to be received
     When I send GET request to "/fill/300/200/raw.githubusercontent2.com/_gopher_original_1024x504.jpg" for non-existing server nginx2
-    Then the response code should be 500
-    And the response payload must contain "no such host"
+    Then the response code 500 and the response payload "no such host" for a non-existing server

@@ -8,16 +8,16 @@ networks:
         - subnet: 192.168.11.16/28
 
 services:
-  integration_tests:
-    build:
-      context: ./
-      dockerfile: ./integration/Dockerfile
-    command: "true"
-    links:
-      - previewer
-      - nginx
-    networks:
-      - app
+#  integration_tests:
+#    build:
+#      context: ./
+#      dockerfile: ./integration/Dockerfile
+#    command: "true"
+#    links:
+#      - previewer
+#      - nginx
+#    networks:
+#      - app
   nginx:
     build:
       context: ./

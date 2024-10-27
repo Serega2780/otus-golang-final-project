@@ -60,7 +60,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	imageInfo, er := p.service.Get(infoKey)
 	if er != nil {
 		v, er, _ := sfg.Do(infoKey, func() (interface{}, error) {
-			resp, err := p.proxyRequest(r, infoKey)
+			resp, err := p.proxyRequest(r, infoKey+util.QUESTION+r.URL.RawQuery)
 			if err != nil {
 				return resp, err
 			}

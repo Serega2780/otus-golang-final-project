@@ -121,47 +121,11 @@ func (ips *ImageProcessingService) ProcessPath(path string) (string, string, *mo
 		ips.log.Errorf("%v", er)
 		return "", "", nil, er
 	}
-	fileName := util.GetFileName(path)
-	isMatched := ips.r.MatchString(fileName)
-	if !isMatched {
-		return "", "", nil, fmt.Errorf(util.ErrFileNameFormat.Error(), util.PATTERN)
-	}
-	underscore := strings.LastIndex(fileName, util.UNDERSCORE)
-	if underscore == -1 {
-		return "", "", nil, util.ErrFileNameFormat
-	}
-	dot := strings.LastIndex(fileName, util.DOT)
-	if dot == -1 {
-		return "", "", nil, util.ErrFileNameFormat
-	}
-	name := util.Substr(fileName, 0, underscore+1)
-	if len(name) == 0 {
-		return "", "", nil, util.ErrFileNameTooShort
-	}
-	ext := util.Substr(fileName, dot, len(fileName))
-	if ext != util.JPG && ext != util.JPEG {
-		ips.log.Errorf("%v", util.ErrWrongImageType)
-		return "", "", nil, util.ErrWrongImageType
-	}
-	dimensions := util.Substr(fileName, underscore+1, dot)
-	dims := strings.Split(dimensions, util.X)
-	w, err := strconv.Atoi(dims[0])
+	remoteHost, subDir, fileName, err := util.ParsePath(path)
 	if err != nil {
-		ips.log.Errorf("%v", err)
 		return "", "", nil, err
 	}
-	h, err := strconv.Atoi(dims[1])
-	if err != nil {
-		ips.log.Errorf("%v", err)
-		return "", "", nil, err
-	}
-	if width > w || height > h {
-		ips.log.Errorf("%v", util.ErrWrongDimensions)
-		return "", "", nil, util.ErrWrongDimensions
-	}
-	remoteAddress := util.Substr(path, 0, strings.Index(path, util.SLASH))
-	fn := util.Substr(fileName, 0, strings.LastIndex(fileName, util.DOT))
-	bd := ips.dir + remoteAddress + util.SLASH + fn + util.SLASH
+	bd := ips.dir + remoteHost + util.SLASH + subDir + util.SLASH
 	info := model.NewImageInfo(bd+fileName, bd)
 	rk := strconv.Itoa(width) + util.UNDERSCORE + strconv.Itoa(height)
 

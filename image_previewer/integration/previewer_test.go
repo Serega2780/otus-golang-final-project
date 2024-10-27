@@ -34,40 +34,47 @@ func InitializeScenario(godogCtx *godog.ScenarioContext) {
 	}
 
 	test := &previewerTest{
-		url: "http://previewer:8585",
+		url: "http://localhost:8585",
 		client: &http.Client{
 			Transport: tr,
 		},
 	}
+
 	godogCtx.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-		return context.WithValue(ctx, godogsResponseCtxKey{}, &response{status: 0, body: nil}), nil
+		return context.WithValue(ctx, godogsResponseCtxKey{}, &response{}), nil
 	})
-	godogCtx.Step(`^I send GET request to "([^"]*)" for non-existing server nginx2`, test.iServerNotExists)
-	godogCtx.Step(`^the response code should be (\d+)$`, test.theResponseCodeShouldBe)
-	godogCtx.Step(`^the response payload must contain "([^"]*)"`, test.iServerNotExistsCheckResponse)
 
-	godogCtx.Step(`^I send GET request to "([^"]*)" for non-existing image _gopher_fake_1024x504.jpg`,
-		test.iImageNotExists)
-	godogCtx.Step(`^the response code should be (\d+)$`, test.theResponseCodeShouldBe)
-	godogCtx.Step(`^the response payload must contain "([^"]*)"`, test.iImageNotExistsCheckResponse)
-
-	godogCtx.Step(`^I send GET request to "([^"]*)" for an image 7z_100x100.jpg`, test.iImageWrongFormat)
-	godogCtx.Step(`^the response code should be (\d+)$`, test.theResponseCodeShouldBe)
-	godogCtx.Step(`^the response payload must contain "([^"]*)"`, test.iImageWrongFormatCheckResponse)
-
-	godogCtx.Step(`^I send GET request to "([^"]*)" for an existing image _gopher_original_1024x504.jpg`,
-		test.iImageFoundRemote)
-	godogCtx.Step(`^the response code should be (\d+)$`, test.theResponseCodeShouldBe)
-	godogCtx.Step(`^the response payload must be a valid JPEG image`, test.iImageFoundRemoteCheckResponse)
-
-	godogCtx.Step(`^I send GET request to "([^"]*)" for an image gopher_50x50.jpg`, test.iImageWrongDimensions)
-	godogCtx.Step(`^the response code should be (\d+)$`, test.theResponseCodeShouldBe)
-	godogCtx.Step(`^the response payload must contain "([^"]*)"`, test.iImageWrongDimensionsCheckResponse)
-
-	godogCtx.Step(`^I send GET request to "([^"]*)" for an existing image _gopher_original_1024x504.jpg`,
+	godogCtx.When(`^I send GET request to "([^"]*)" for an existing image _gopher_original_1024x504.jpg`,
 		test.iImageFoundLocal)
-	godogCtx.Step(`^the response code should be (\d+)$`, test.theResponseCodeShouldBe)
-	godogCtx.Step(`^the response payload must be a valid JPEG image`, test.iImageFoundLocalCheckResponse)
+	godogCtx.Then(`^the response code (\d+) and the response header X-Previewer-Cache-Hit is "([^"]*)"`,
+		test.iImageFoundLocalCheckResponse)
+
+	godogCtx.When(`^I send GET request to "([^"]*)" for non-existing server nginx2`, test.iServerNotExists)
+	godogCtx.Then(`^the response code (\d+) and the response payload "([^"]*)" for a non-existing server`,
+		test.iServerNotExistsCheckResponse)
+
+	godogCtx.When(`^I send GET request to "([^"]*)" for non-existing image _gopher_fake_1024x504.jpg`,
+		test.iImageNotExists)
+	godogCtx.Then(`^the response code (\d+) and the response payload "([^"]*)" for a non-existing image`,
+		test.iImageNotExistsCheckResponse)
+
+	godogCtx.When(`^I send GET request to "([^"]*)" for an image 7z_100x100.jpg`, test.iImageWrongFormat)
+	godogCtx.Then(`^the response code (\d+) and the response payload "([^"]*)" for wrong format image`,
+		test.iImageWrongFormatCheckResponse)
+
+	godogCtx.When(`^I send GET request to "([^"]*)" for an existing image gopher_2000x1000.jpg`,
+		test.iImageFoundRemote)
+	godogCtx.Then(`^the response code (\d+) and the response payload must be JPEG image found remotely`,
+		test.iImageFoundRemoteCheckResponse)
+
+	godogCtx.When(`^I send GET request to "([^"]*)" for an image gopher_50x50.jpg`, test.iImageResizeUp)
+	godogCtx.Then(`^the response code (\d+) and the res payload must have width (\d+) and height (\d+)$`,
+		test.iImageResizeUpCheckResponse)
+
+	godogCtx.When(`^I send GET request to "([^"]*)" for an existing image gopher_333x666.jpg`,
+		test.iImageHeaderAbsence)
+	godogCtx.Then(`^the response code (\d+), the response payload "([^"]*)", because of auth header absence`,
+		test.iImageHeaderAbsenceCheckResponse)
 }
 
 func (pt *previewerTest) iImageFoundLocal(ctx context.Context, route string) (context.Context, error) {
@@ -83,16 +90,16 @@ func (pt *previewerTest) iImageFoundLocal(ctx context.Context, route string) (co
 		_ = Body.Close()
 	}(res2.Body)
 	b, _ := io.ReadAll(res2.Body)
-	actual := response{
+	actual := &response{
 		status:  res.StatusCode,
 		body:    b,
 		headers: res2.Header,
 	}
 
-	return context.WithValue(ctx, godogsResponseCtxKey{}, &actual), nil
+	return context.WithValue(ctx, godogsResponseCtxKey{}, actual), nil
 }
 
-func (pt *previewerTest) iImageWrongDimensions(ctx context.Context, route string) (context.Context, error) {
+func (pt *previewerTest) iImageResizeUp(ctx context.Context, route string) (context.Context, error) {
 	req, _ := http.NewRequestWithContext(ctx, "", pt.url+route, nil)
 	req.Header.Set("Authorization", "Basic ==")
 	res, _ := pt.client.Do(req) //nolint:bodyclose
@@ -100,12 +107,13 @@ func (pt *previewerTest) iImageWrongDimensions(ctx context.Context, route string
 		_ = Body.Close()
 	}(res.Body)
 	b, _ := io.ReadAll(res.Body)
-	actual := response{
-		status: res.StatusCode,
-		body:   b,
+	actual := &response{
+		status:  res.StatusCode,
+		body:    b,
+		headers: res.Header,
 	}
 
-	return context.WithValue(ctx, godogsResponseCtxKey{}, &actual), nil
+	return context.WithValue(ctx, godogsResponseCtxKey{}, actual), nil
 }
 
 func (pt *previewerTest) iImageFoundRemote(ctx context.Context, route string) (context.Context, error) {
@@ -116,12 +124,13 @@ func (pt *previewerTest) iImageFoundRemote(ctx context.Context, route string) (c
 		_ = Body.Close()
 	}(res.Body)
 	b, _ := io.ReadAll(res.Body)
-	actual := response{
-		status: res.StatusCode,
-		body:   b,
+	actual := &response{
+		status:  res.StatusCode,
+		body:    b,
+		headers: res.Header,
 	}
 
-	return context.WithValue(ctx, godogsResponseCtxKey{}, &actual), nil
+	return context.WithValue(ctx, godogsResponseCtxKey{}, actual), nil
 }
 
 func (pt *previewerTest) iImageWrongFormat(ctx context.Context, route string) (context.Context, error) {
@@ -132,12 +141,13 @@ func (pt *previewerTest) iImageWrongFormat(ctx context.Context, route string) (c
 		_ = Body.Close()
 	}(res.Body)
 	b, _ := io.ReadAll(res.Body)
-	actual := response{
-		status: res.StatusCode,
-		body:   b,
+	actual := &response{
+		status:  res.StatusCode,
+		body:    b,
+		headers: res.Header,
 	}
 
-	return context.WithValue(ctx, godogsResponseCtxKey{}, &actual), nil
+	return context.WithValue(ctx, godogsResponseCtxKey{}, actual), nil
 }
 
 func (pt *previewerTest) iImageNotExists(ctx context.Context, route string) (context.Context, error) {
@@ -148,12 +158,13 @@ func (pt *previewerTest) iImageNotExists(ctx context.Context, route string) (con
 		_ = Body.Close()
 	}(res.Body)
 	b, _ := io.ReadAll(res.Body)
-	actual := response{
-		status: res.StatusCode,
-		body:   b,
+	actual := &response{
+		status:  res.StatusCode,
+		body:    b,
+		headers: res.Header,
 	}
 
-	return context.WithValue(ctx, godogsResponseCtxKey{}, &actual), nil
+	return context.WithValue(ctx, godogsResponseCtxKey{}, actual), nil
 }
 
 func (pt *previewerTest) iServerNotExists(ctx context.Context, route string) (context.Context, error) {
@@ -164,32 +175,40 @@ func (pt *previewerTest) iServerNotExists(ctx context.Context, route string) (co
 		_ = Body.Close()
 	}(res.Body)
 	b, _ := io.ReadAll(res.Body)
-	actual := response{
-		status: res.StatusCode,
-		body:   b,
+	actual := &response{
+		status:  res.StatusCode,
+		body:    b,
+		headers: res.Header,
 	}
 
-	return context.WithValue(ctx, godogsResponseCtxKey{}, &actual), nil
+	return context.WithValue(ctx, godogsResponseCtxKey{}, actual), nil
 }
 
-func (pt *previewerTest) theResponseCodeShouldBe(ctx context.Context, expectedStatus int) error {
-	resp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
-	if !ok {
-		return errors.New("there are no godogs available")
+func (pt *previewerTest) iImageHeaderAbsence(ctx context.Context, route string) (context.Context, error) {
+	req, _ := http.NewRequestWithContext(ctx, "", pt.url+route, nil)
+	res, _ := pt.client.Do(req) //nolint:bodyclose
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(res.Body)
+	b, _ := io.ReadAll(res.Body)
+	actual := &response{
+		status:  res.StatusCode,
+		body:    b,
+		headers: res.Header,
 	}
 
-	if expectedStatus != resp.status {
-		return fmt.Errorf("expected response code to be: %d, but actual is: %d", expectedStatus, resp.status)
-	}
-
-	return nil
+	return context.WithValue(ctx, godogsResponseCtxKey{}, actual), nil
 }
 
-func (pt *previewerTest) iServerNotExistsCheckResponse(ctx context.Context, subStr string) error {
+func (pt *previewerTest) iServerNotExistsCheckResponse(ctx context.Context, expectedStatus int, subStr string) error {
 	actualResp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
 	if !ok {
 		return errors.New("there are no godogs available")
 	}
+	if err := checkStatus(expectedStatus, actualResp.status); err != nil {
+		return err
+	}
+
 	body := string(actualResp.body.([]byte))
 
 	if !strings.Contains(body, subStr) {
@@ -199,11 +218,15 @@ func (pt *previewerTest) iServerNotExistsCheckResponse(ctx context.Context, subS
 	return nil
 }
 
-func (pt *previewerTest) iImageNotExistsCheckResponse(ctx context.Context, subStr string) error {
+func (pt *previewerTest) iImageNotExistsCheckResponse(ctx context.Context, expectedStatus int, subStr string) error {
 	actualResp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
 	if !ok {
 		return errors.New("there are no godogs available")
 	}
+	if err := checkStatus(expectedStatus, actualResp.status); err != nil {
+		return err
+	}
+
 	body := string(actualResp.body.([]byte))
 
 	if !strings.Contains(body, subStr) {
@@ -213,11 +236,15 @@ func (pt *previewerTest) iImageNotExistsCheckResponse(ctx context.Context, subSt
 	return nil
 }
 
-func (pt *previewerTest) iImageWrongFormatCheckResponse(ctx context.Context, subStr string) error {
+func (pt *previewerTest) iImageWrongFormatCheckResponse(ctx context.Context, expectedStatus int, subStr string) error {
 	actualResp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
 	if !ok {
 		return errors.New("there are no godogs available")
 	}
+	if err := checkStatus(expectedStatus, actualResp.status); err != nil {
+		return err
+	}
+
 	body := string(actualResp.body.([]byte))
 
 	if !strings.Contains(body, subStr) {
@@ -227,11 +254,15 @@ func (pt *previewerTest) iImageWrongFormatCheckResponse(ctx context.Context, sub
 	return nil
 }
 
-func (pt *previewerTest) iImageFoundRemoteCheckResponse(ctx context.Context) error {
+func (pt *previewerTest) iImageFoundRemoteCheckResponse(ctx context.Context, expectedStatus int) error {
 	actualResp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
 	if !ok {
 		return errors.New("there are no godogs available")
 	}
+	if err := checkStatus(expectedStatus, actualResp.status); err != nil {
+		return err
+	}
+
 	body := actualResp.body.([]byte)
 	_, err := jpeg.Decode(bytes.NewReader(body))
 	if err != nil {
@@ -241,34 +272,80 @@ func (pt *previewerTest) iImageFoundRemoteCheckResponse(ctx context.Context) err
 	return nil
 }
 
-func (pt *previewerTest) iImageWrongDimensionsCheckResponse(ctx context.Context, subStr string) error {
+func (pt *previewerTest) iImageResizeUpCheckResponse(ctx context.Context, expectedStatus int, expectedWidth,
+	expectedHeight int,
+) error {
 	actualResp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
 	if !ok {
 		return errors.New("there are no godogs available")
 	}
-	body := string(actualResp.body.([]byte))
+	if err := checkStatus(expectedStatus, actualResp.status); err != nil {
+		return err
+	}
 
-	if !strings.Contains(body, subStr) {
-		return fmt.Errorf("response %v does not contain %v", body, subStr)
+	body := actualResp.body.([]byte)
+	img, err := jpeg.Decode(bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("response is not a valid JPEG image %w", err)
+	}
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
+
+	if width != expectedWidth {
+		return fmt.Errorf("expectedWidth %d does not equal actual width %v", expectedWidth, width)
+	}
+	if height != expectedHeight {
+		return fmt.Errorf("expectedHeight %d does not equal actual height %v", expectedHeight, height)
 	}
 
 	return nil
 }
 
-func (pt *previewerTest) iImageFoundLocalCheckResponse(ctx context.Context) error {
+func (pt *previewerTest) iImageFoundLocalCheckResponse(ctx context.Context, expectedStatus int, header string) error {
 	actualResp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
 	if !ok {
 		return errors.New("there are no godogs available")
 	}
+	if err := checkStatus(expectedStatus, actualResp.status); err != nil {
+		return err
+	}
+
 	body := actualResp.body.([]byte)
 	_, err := jpeg.Decode(bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("response is not a valid JPEG image %w", err)
 	}
 	hit := actualResp.headers.Get("X-Previewer-Cache-Hit")
-	if hit != "true" {
+	if hit != header {
 		return fmt.Errorf("cache hit header must be true, received %v", hit)
 	}
 
+	return nil
+}
+
+func (pt *previewerTest) iImageHeaderAbsenceCheckResponse(ctx context.Context, expectedStatus int,
+	subStr string,
+) error {
+	actualResp, ok := ctx.Value(godogsResponseCtxKey{}).(*response)
+	if !ok {
+		return errors.New("there are no godogs available")
+	}
+	if err := checkStatus(expectedStatus, actualResp.status); err != nil {
+		return err
+	}
+
+	body := string(actualResp.body.([]byte))
+
+	if !strings.Contains(body, subStr) {
+		return fmt.Errorf("response %v does not contain %v", body, subStr)
+	}
+
+	return nil
+}
+
+func checkStatus(expectedStatus, actualStatus int) error {
+	if expectedStatus != actualStatus {
+		return fmt.Errorf("expected response code to be: %d, but actual is: %d", expectedStatus, actualStatus)
+	}
 	return nil
 }

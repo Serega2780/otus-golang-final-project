@@ -10,5 +10,4 @@ Feature: Image previewer
 
   Scenario: then user try to find an image with wrong format, but correct extension, an error has to be received
     When I send GET request to "/fill/50/50/nginx/7z_100x100.jpg" for an image 7z_100x100.jpg
-    Then the response code should be 500
-    And the response payload must contain "invalid JPEG format"
+    Then the response code 500 and the response payload "invalid JPEG format" for wrong format image

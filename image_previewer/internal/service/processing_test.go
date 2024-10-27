@@ -73,8 +73,8 @@ func TestSetKey(t *testing.T) {
 		require.Equal(t, "/tmp/test.ru/gopher_500x500/gopher_500x500.jpg", newImageInfo.BasicFile)
 		require.Equal(t, "/tmp/test.ru/gopher_500x500/", newImageInfo.BasicDir)
 	})
-	t.Run("gopher_50x50.jpg", func(t *testing.T) {
-		_, _, _, err := ips.ProcessPath("100/50/test.ru/gopher_50x50.jpg")
-		require.Equal(t, util.ErrWrongDimensions, err)
+	t.Run("gopher$$$.jpg", func(t *testing.T) {
+		_, _, _, err := ips.ProcessPath("100/50/test.ru/gopher$$$.jpg")
+		require.Errorf(t, err, util.ErrWrongPath.Error(), "file name in a valid format "+util.PATTERN)
 	})
 }
